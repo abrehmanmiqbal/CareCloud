@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ava — CareCloud Patient Registration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #F2F6F5;
+    --panel: #FFFFFF;
+    --ink: #0C2426;
+    --ink-soft: #52706C;
+    --teal: #0F5C56;
+    --teal-deep: #082F2C;
+    --teal-bright: #17847A;
+    --mint: #C7ECDF;
+    --mint-soft: #EAF7F1;
+    --pulse: #FF6A4D;
+    --pulse-soft: #FFE3DB;
+    --gold: #E7B15C;
+    --line: #DDEAE6;
+    --radius: 24px;
+    --shadow-lg: 0 24px 60px -24px rgba(8,47,44,0.28);
+    --shadow-sm: 0 2px 8px -2px rgba(8,47,44,0.08);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%; overflow-x:hidden;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 10% -5%, #E1F1EB 0%, transparent 42%),
+      radial-gradient(circle at 105% 10%, #DDF2ED 0%, transparent 38%),
+      radial-gradient(circle at 50% 120%, #E9F5F0 0%, transparent 45%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:clamp(12px, 4vw, 28px);
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{ width:100%; max-width:1040px; min-width:0; margin:0 auto; }
+
+  /* ---------- Brand bar ---------- */
+  .brand{ display:flex; align-items:center; gap:10px; margin-bottom:clamp(12px,3vw,18px); flex-wrap:wrap; row-gap:8px; }
+  .brand .mark{
+    width:clamp(32px,7vw,38px);height:clamp(32px,7vw,38px);border-radius:11px; flex:none;
+    background:linear-gradient(150deg,var(--teal-bright),var(--teal-deep));
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 6px 16px -6px rgba(8,47,44,0.45);
+  }
+  .brand .mark svg{width:18px;height:18px;}
+  .brand h1{ font-family:'Fraunces',serif; font-weight:700; font-size:clamp(19px,4.5vw,24px); margin:0; letter-spacing:-0.01em; }
+  .brand .tagline{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); background:var(--mint-soft); border:1px solid var(--mint); padding:4px 10px; border-radius:20px; white-space:nowrap; }
+  .brand .telephony-badge{
+    display:flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:500; white-space:nowrap;
+    color:var(--teal-deep); background:linear-gradient(135deg,#FFF6EA,#FFEFD8);
+    border:1px solid #F0DCA9; padding:4px 10px 4px 8px; border-radius:20px;
+    margin-left:auto;
+  }
+  .brand .telephony-badge .dot{ width:6px;height:6px;border-radius:50%; background:var(--gold); box-shadow:0 0 0 3px rgba(231,177,92,0.25); }
+
+  .grid{ display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:clamp(14px,3vw,20px); }
+  @media (max-width:860px){ .grid{ grid-template-columns:minmax(0,1fr); } .brand .telephony-badge{ margin-left:0; } }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow-lg), var(--shadow-sm);
+    position:relative;
+    overflow:hidden;
+    min-width:0;
+  }
+
+  /* ---------- Call stage ---------- */
+  .stage{ padding:clamp(20px,5vw,30px) clamp(16px,4vw,28px) clamp(18px,4vw,26px); display:flex; flex-direction:column; align-items:center; text-align:center; min-width:0; }
+  .stage::before{
+    content:''; position:absolute; top:-40%; left:50%; transform:translateX(-50%);
+    width:140%; height:220px; border-radius:50%;
+    background:radial-gradient(circle, rgba(199,236,223,0.55), transparent 70%);
+    pointer-events:none;
+  }
+  .call-timer{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft); letter-spacing:.05em; min-height:16px; margin-bottom:4px; }
+
+  .orb-wrap{ position:relative; width:clamp(160px,42vw,214px); height:clamp(160px,42vw,214px); margin:10px 0 20px; z-index:1; }
+  .orb-ring{ position:absolute; inset:0; border-radius:50%; border:1px solid var(--line); }
+  .orb-ring.r2{ inset:-18px; opacity:.55; }
+  .orb-ring.r3{ inset:-36px; opacity:.28; }
+  .orb{
+    position:absolute; inset:16px; border-radius:50%;
+    background:radial-gradient(circle at 32% 28%, var(--teal-bright), var(--teal-deep) 72%);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: inset 0 -14px 30px rgba(0,0,0,0.28), inset 0 8px 18px rgba(255,255,255,0.08), 0 16px 40px -12px rgba(8,47,44,0.55);
+    transition:box-shadow .35s ease;
+    overflow:hidden;
+  }
+  .orb canvas{ width:76%; height:auto; }
+  .orb-wrap.listening .orb{ box-shadow: inset 0 -14px 30px rgba(0,0,0,0.22), 0 0 0 9px rgba(255,106,77,0.15), 0 16px 44px -10px rgba(255,106,77,0.5); }
+  .orb-wrap.listening .orb-ring{ animation: expand 1.7s ease-out infinite; border-color:var(--pulse); }
+  .orb-wrap.listening .orb-ring.r2{ animation-delay:.35s; }
+  .orb-wrap.listening .orb-ring.r3{ animation-delay:.7s; }
+  @keyframes expand{ 0%{ transform:scale(0.9); opacity:.7; } 100%{ transform:scale(1.28); opacity:0; } }
+  .orb-wrap.thinking .orb{ animation: breathe 1s ease-in-out infinite; }
+  @keyframes breathe{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(0.96);} }
+  .orb-wrap.idle .orb{ animation: idle-glow 4s ease-in-out infinite; }
+  @keyframes idle-glow{ 0%,100%{ filter:brightness(1);} 50%{ filter:brightness(1.08);} }
+
+  .status-label{ font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.06em; color:var(--teal); text-transform:uppercase; font-weight:600; margin-bottom:5px; z-index:1; }
+  .status-detail{ font-size:14px; color:var(--ink-soft); margin-bottom:22px; max-width:340px; z-index:1; line-height:1.5; }
+
+  .controls{ display:flex; gap:10px; z-index:1; flex-wrap:wrap; justify-content:center; width:100%; }
+  button{ font-family:'Inter',sans-serif; font-weight:600; font-size:14px; border:none; border-radius:14px; padding:13px 22px; cursor:pointer; transition:transform .12s ease, box-shadow .12s ease, background .15s ease; display:inline-flex; align-items:center; justify-content:center; gap:8px; white-space:nowrap; }
+  button:active{ transform:scale(0.96); }
+  #startCallBtn{ background:linear-gradient(135deg,var(--teal-bright),var(--teal-deep)); color:#fff; box-shadow:0 10px 22px -8px rgba(15,92,86,0.55); flex:1 1 auto; min-width:150px; }
+  #startChatBtn.secondary-entry{ background:var(--panel); color:var(--teal-deep); border:1px solid var(--mint); flex:1 1 auto; min-width:150px; }
+  #startChatBtn.secondary-entry:hover{ background:var(--mint-soft); }
+  #muteBtn{ background:var(--panel); color:var(--ink-soft); border:1px solid var(--line); flex:0 1 auto; }
+  #muteBtn:hover{ border-color:#F0B7A6; color:var(--pulse); }
+  #micBtn{ background:linear-gradient(135deg,var(--teal-bright),var(--teal-deep)); color:#fff; box-shadow:0 10px 22px -8px rgba(15,92,86,0.55); flex:1 1 auto; min-width:150px; justify-content:center; }
+  #micBtn.recording{ background:linear-gradient(135deg,#FF8266,var(--pulse)); box-shadow:0 10px 22px -8px rgba(255,106,77,0.55); }
+  #micBtn:disabled{ opacity:.5; cursor:default; transform:none; }
+
+  .textfallback{ display:flex; gap:8px; margin-top:16px; width:100%; max-width:340px; z-index:1; }
+  .textfallback input{
+    flex:1; border:1px solid var(--line); border-radius:12px; padding:10px 14px;
+    font-family:'Inter',sans-serif; font-size:13px; color:var(--ink); background:var(--bg);
+  }
+  .textfallback input:focus{ outline:none; border-color:var(--teal-bright); }
+  .textfallback button{ padding:10px 16px; font-size:13px; background:var(--ink); color:#fff; }
+
+  .hint{ margin-top:18px; font-size:12px; color:var(--ink-soft); line-height:1.6; z-index:1; }
+  .hint b{ color:var(--ink); }
+
+  .chips{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:16px; z-index:1; }
+  .chip{
+    font-family:'Inter',sans-serif; font-size:12px; font-weight:500; color:var(--teal-deep);
+    background:var(--mint-soft); border:1px solid var(--mint); padding:7px 13px; border-radius:20px;
+    cursor:pointer; transition:background .15s ease, transform .12s ease;
+  }
+  .chip:hover{ background:var(--mint); }
+  .chip:active{ transform:scale(0.96); }
+
+  /* ---------- Transcript panel ---------- */
+  .transcript-panel{ display:flex; flex-direction:column; height:100%; min-height:clamp(300px,55vh,470px); padding:clamp(18px,4vw,26px) clamp(16px,4vw,24px); min-width:0; }
+  .transcript-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px; }
+  .transcript-head h2{ font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0; }
+  .transcript-head span{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); }
+
+  .transcript{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:11px; padding-right:4px; }
+  .msg{ max-width:88%; padding:11px 15px; border-radius:15px; font-size:14px; line-height:1.5; animation:pop .25s ease; }
+  @keyframes pop{ from{ opacity:0; transform:translateY(6px) scale(0.98);} to{ opacity:1; transform:translateY(0) scale(1);} }
+  .msg.agent{ align-self:flex-start; background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .msg.user{ align-self:flex-end; background:linear-gradient(135deg,var(--teal-bright),var(--teal-deep)); color:#fff; border-bottom-right-radius:4px; }
+  .msg .role{ display:block; font-family:'IBM Plex Mono',monospace; font-size:10px; opacity:.65; margin-bottom:4px; text-transform:uppercase; letter-spacing:.06em; }
+  .transcript-empty{ margin:auto; text-align:center; color:var(--ink-soft); font-size:13px; max-width:220px; line-height:1.6; }
+
+  .ticket{ margin-top:16px; padding:18px; border-radius:18px; background:linear-gradient(135deg,var(--mint-soft),#F7FBF9); border:1px dashed var(--mint); display:none; animation: rise .4s cubic-bezier(.2,.8,.2,1); }
+  .ticket.show{ display:block; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(10px);} to{ opacity:1; transform:translateY(0);} }
+  .ticket-head{ display:flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal-deep); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px; font-weight:600; }
+  .ticket-head .dot{ width:7px;height:7px;border-radius:50%; background:var(--teal-bright); box-shadow:0 0 0 4px rgba(23,132,122,0.18); }
+  .ticket-row{ display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px dotted rgba(15,92,86,0.12); }
+  .ticket-row:last-child{ border-bottom:none; }
+  .ticket-row b{ font-weight:600; text-align:right; }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:10px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="brand">
+    <div class="mark">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h1>Ava</h1>
+    <span class="tagline">CareCloud voice patient registration · demo</span>
+    <span class="telephony-badge" title="This same backend can answer real phone calls via a Vapi Custom LLM integration — see README.">
+      <span class="dot"></span> Telephony-ready
+    </span>
+  </div>
+
+  <div class="grid">
+    <div class="panel stage">
+      <div class="call-timer" id="callTimer"></div>
+      <div class="orb-wrap idle" id="orbWrap">
+        <div class="orb-ring r3"></div>
+        <div class="orb-ring r2"></div>
+        <div class="orb-ring"></div>
+        <div class="orb"><canvas id="wave" width="140" height="70"></canvas></div>
+      </div>
+      <div class="status-label" id="statusLabel">Tap to start</div>
+      <div class="status-detail" id="statusDetail">Ava collects your demographics — name, date of birth, contact and address — to register you as a new CareCloud patient.</div>
+      <div class="controls" id="entryControls">
+        <button id="startCallBtn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Start Call
+        </button>
+        <button id="startChatBtn" class="secondary-entry">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Start Voice Chat
+        </button>
+      </div>
+      <div class="controls" id="activeControls" style="display:none;">
+        <button id="micBtn" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Tap to talk
+        </button>
+        <button id="muteBtn">End call</button>
+      </div>
+      <div class="textfallback" id="textFallback" style="display:none;">
+        <input type="text" id="textInput" placeholder="…or type instead of speaking" />
+        <button id="textSend">Send</button>
+      </div>
+      <div class="chips" id="chips" style="display:none;">
+        <div class="chip" data-q="Hi, I'd like to register as a new patient.">New patient</div>
+        <div class="chip" data-q="I already registered — I want to update my information.">Update my info</div>
+        <div class="chip" data-q="Hablo español, ¿me puede ayudar?">Hablo español</div>
+      </div>
+      <div class="hint">Runs entirely in your browser mic — <b>no phone number, no card, $0 cost.</b> Works in Chrome, Edge, Firefox &amp; Safari.</div>
+    </div>
+
+    <div class="panel transcript-panel">
+      <div class="transcript-head">
+        <h2>Live transcript</h2>
+        <span id="turnCount">0 turns</span>
+      </div>
+      <div class="transcript" id="transcript">
+        <div class="transcript-empty" id="transcriptEmpty">Start a call to see the live conversation here, including transcript and any patient records saved.</div>
+      </div>
+      <div class="ticket" id="ticket">
+        <div class="ticket-head"><span class="dot"></span> Patient registered</div>
+        <div class="ticket-row"><span>Patient</span><b id="tName">—</b></div>
+        <div class="ticket-row"><span>Status</span><b id="tReason">—</b></div>
+        <div class="ticket-row"><span>Patient ID</span><b id="tWhen">—</b></div>
+        <div class="ticket-row"><span>Ref #</span><b id="tId">—</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const orbWrap = document.getElementById('orbWrap');
+const statusLabel = document.getElementById('statusLabel');
+const statusDetail = document.getElementById('statusDetail');
+const startCallBtn = document.getElementById('startCallBtn');
+const startChatBtn = document.getElementById('startChatBtn');
+const entryControls = document.getElementById('entryControls');
+const activeControls = document.getElementById('activeControls');
+const micBtn = document.getElementById('micBtn');
+const muteBtn = document.getElementById('muteBtn');
+const transcriptEl = document.getElementById('transcript');
+const transcriptEmpty = document.getElementById('transcriptEmpty');
+const turnCount = document.getElementById('turnCount');
+const ticket = document.getElementById('ticket');
+const callTimerEl = document.getElementById('callTimer');
+const textFallback = document.getElementById('textFallback');
+const textInput = document.getElementById('textInput');
+const textSend = document.getElementById('textSend');
+const chipsEl = document.getElementById('chips');
+
+let history = [];
+let callActive = false;
+let callMode = null; // 'call' (hands-free, auto-listen/auto-send) or 'chat' (manual tap-to-talk)
+let speaking = false;
+let recording = false;
+let mediaStream = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let callStart = null;
+let timerHandle = null;
+
+// ---- audio-reactive waveform ----
+const canvas = document.getElementById('wave');
+const ctx = canvas.getContext('2d');
+let audioCtx = null, analyser = null, freqData = null;
+let idleT = 0;
+
+function setupAnalyser(){
+  if(analyser || !mediaStream) return;
+  try{
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(mediaStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 64;
+    analyser.smoothingTimeConstant = 0.75;
+    source.connect(analyser); // NOT connected to destination — avoids echo/feedback
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+  }catch(e){ /* analyser unavailable — falls back to idle animation only */ }
+}
+
+function drawBars(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const barCount = 20;
+  const gap = 3;
+  const barWidth = (canvas.width - gap*(barCount-1)) / barCount;
+  let levels = [];
+
+  if(recording && analyser){
+    analyser.getByteFrequencyData(freqData);
+    const step = Math.floor(freqData.length / barCount) || 1;
+    for(let i=0;i<barCount;i++){
+      const v = freqData[i*step] / 255;
+      levels.push(Math.max(0.06, v));
+    }
+  } else {
+    idleT += speaking ? 0.22 : 0.07;
+    for(let i=0;i<barCount;i++){
+      const phase = idleT + i*0.5;
+      const amp = speaking ? 0.55 : 0.16;
+      levels.push(0.12 + Math.abs(Math.sin(phase))*amp);
+    }
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  levels.forEach((lvl, i)=>{
+    const h = Math.max(3, lvl * canvas.height);
+    const x = i * (barWidth + gap);
+    const y = (canvas.height - h) / 2;
+    const r = Math.min(2.5, barWidth/2);
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(x, y, barWidth, h, r); else ctx.rect(x, y, barWidth, h);
+    ctx.fill();
+  });
+}
+setInterval(drawBars, 45);
+
+// ---- call timer ----
+function startTimer(){
+  callStart = Date.now();
+  timerHandle = setInterval(()=>{
+    const s = Math.floor((Date.now()-callStart)/1000);
+    const mm = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    callTimerEl.textContent = `${mm}:${ss}`;
+  }, 500);
+}
+function stopTimer(){
+  clearInterval(timerHandle);
+  callTimerEl.textContent = '';
+}
+
+function addMsg(role, text){
+  if(transcriptEmpty) transcriptEmpty.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = `<span class="role">${role === 'agent' ? 'Ava' : 'You'}</span>${text}`;
+  transcriptEl.appendChild(div);
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+function setStatus(label, detail, mode){
+  statusLabel.textContent = label;
+  if(detail) statusDetail.textContent = detail;
+  orbWrap.classList.remove('listening','thinking','idle');
+  orbWrap.classList.add(mode || 'idle');
+}
+
+function speak(text){
+  return new Promise((resolve)=>{
+    if(!('speechSynthesis' in window)){ resolve(false); return; }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.02;
+    utter.pitch = 1.0;
+    const voices = speechSynthesis.getVoices();
+    const preferred = voices.find(v => /en-US|en-GB/.test(v.lang) && /female|Samantha|Google US English/i.test(v.name)) || voices.find(v=>/en/.test(v.lang));
+    if(preferred) utter.voice = preferred;
+    speaking = true;
+    setStatus('Speaking…', null, 'thinking');
+
+    // ---- barge-in: if the caller starts talking while we're speaking (call mode only),
+    // stop the assistant immediately and let the caller take the turn ----
+    let interrupted = false;
+    let bargeRaf = null;
+    let bargeSpeechStart = null;
+    const BARGE_THRESHOLD = 26;   // a bit above normal speech threshold to ignore TTS echo bleed
+    const BARGE_SUSTAIN_MS = 260; // must be sustained briefly to avoid false triggers
+
+    function bargeTick(){
+      if(!speaking) return;
+      if(callMode === 'call' && callActive && analyser && freqData){
+        analyser.getByteFrequencyData(freqData);
+        let sum = 0; for(let i=0;i<freqData.length;i++) sum += freqData[i];
+        const avg = sum / freqData.length;
+        if(avg > BARGE_THRESHOLD){
+          if(bargeSpeechStart === null) bargeSpeechStart = Date.now();
+          else if(Date.now() - bargeSpeechStart > BARGE_SUSTAIN_MS){
+            interrupted = true;
+            speechSynthesis.cancel(); // fires onend/onerror below
+            return;
+          }
+        } else {
+          bargeSpeechStart = null;
+        }
+      }
+      bargeRaf = requestAnimationFrame(bargeTick);
+    }
+
+    const finish = ()=>{
+      speaking = false;
+      if(bargeRaf) cancelAnimationFrame(bargeRaf);
+      resolve(interrupted);
+    };
+    utter.onend = finish;
+    utter.onerror = finish;
+    speechSynthesis.speak(utter);
+    if(callMode === 'call') bargeRaf = requestAnimationFrame(bargeTick);
+  });
+}
+
+async function sendToAgent(userText){
+  history.push({role:'user', content:userText});
+  addMsg('user', userText);
+  turnCount.textContent = history.length + ' turns';
+  setStatus('Thinking…', 'Ava is working out the best response.', 'thinking');
+
+  try{
+    const res = await fetch('/api/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({history})
+    });
+    if(!res.ok){ throw new Error(await res.text()); }
+    const data = await res.json();
+    history.push({role:'assistant', content:data.reply});
+    addMsg('agent', data.reply);
+    turnCount.textContent = history.length + ' turns';
+    if(data.result) renderTicket(data.result);
+    return await speak(data.reply); // true if the caller talked over the reply
+  }catch(e){
+    addMsg('agent', "Sorry — I couldn't reach the assistant backend. (" + e.message.slice(0,120) + ")");
+    return false;
+  }
+}
+
+function renderTicket(r){
+  const isUpdate = r.type === 'update_patient';
+  document.getElementById('tName').textContent = [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
+  document.getElementById('tReason').textContent = isUpdate ? 'Updated' : 'Registered';
+  document.getElementById('tWhen').textContent = r.patient_id || '—';
+  document.getElementById('tId').textContent = (r.patient_id || '').slice(0, 8) || '—';
+  ticket.querySelector('.ticket-head').innerHTML = '<span class="dot"></span> ' + (isUpdate ? 'Patient record updated' : 'Patient registered');
+  ticket.classList.add('show');
+}
+
+// ---- universal recording: MediaRecorder works in Chrome, Edge, Firefox, Safari 14.1+ ----
+function pickMimeType(){
+  const candidates = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'];
+  for(const c of candidates){
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c)) return c;
+  }
+  return '';
+}
+
+function withTimeout(promise, ms){
+  return new Promise((resolve, reject)=>{
+    const t = setTimeout(()=>reject(new Error('timeout')), ms);
+    promise.then(v=>{ clearTimeout(t); resolve(v); }, e=>{ clearTimeout(t); reject(e); });
+  });
+}
+
+async function ensureMic(){
+  if(mediaStream) return mediaStream;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    throw new Error('getUserMedia unsupported');
+  }
+  // 6s timeout: some browsers/webviews let this promise hang forever instead of
+  // resolving/rejecting, which used to freeze the whole "Start call" button.
+  mediaStream = await withTimeout(navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  }), 6000);
+  setupAnalyser();
+  return mediaStream;
+}
+
+async function startRecording(){
+  if(!navigator.mediaDevices || !window.MediaRecorder){
+    setStatus('Mic not supported', 'This browser lacks microphone recording support — try the text box instead.');
+    return;
+  }
+  try{ await ensureMic(); }
+  catch(e){
+    setStatus('Mic blocked', 'Please allow microphone access in your browser, then tap the mic again.');
+    return;
+  }
+  const mimeType = pickMimeType();
+  audioChunks = [];
+  mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
+  mediaRecorder.ondataavailable = (e)=>{ if(e.data && e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.onstop = onRecordingStop;
+  mediaRecorder.start();
+  recording = true;
+  micBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg> Tap to send';
+  micBtn.classList.add('recording');
+  setStatus('Listening…', 'Speak, then tap the mic again to send.', 'listening');
+}
+
+function stopRecording(){
+  if(mediaRecorder && mediaRecorder.state !== 'inactive'){ mediaRecorder.stop(); }
+  recording = false;
+  micBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg> Tap to talk';
+  micBtn.classList.remove('recording');
+}
+
+async function onRecordingStop(){
+  const mimeType = mediaRecorder.mimeType || 'audio/webm';
+  const blob = new Blob(audioChunks, { type: mimeType });
+  if(blob.size < 1500){
+    setStatus('Didn\'t catch that', 'Tap the mic and try speaking again.');
+    return;
+  }
+  micBtn.disabled = true;
+  setStatus('Transcribing…', null, 'thinking');
+
+  const ext = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+  const form = new FormData();
+  form.append('audio', blob, `clip.${ext}`);
+
+  try{
+    const res = await fetch('/api/transcribe', { method:'POST', body: form });
+    if(!res.ok){
+      const raw = await res.text();
+      let msg = raw;
+      try{ msg = JSON.parse(raw).error || raw; }catch(_){ }
+      throw new Error(msg || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if(!data.text){
+      setStatus('Didn\'t catch that', 'Tap the mic and try speaking again.');
+      micBtn.disabled = false;
+      return;
+    }
+    await sendToAgent(data.text);
+    if(callActive && callMode === 'chat'){
+      micBtn.disabled = false;
+      setStatus('Your turn', 'Tap the mic, speak, then tap again to send.');
+    }
+  }catch(e){
+    addMsg('agent', "Sorry — transcription failed. (" + (e.message || 'unknown error').slice(0,160) + ")");
+    micBtn.disabled = false;
+    setStatus('Your turn', 'Tap the mic, speak, then tap again to send.');
+  }
+}
+
+micBtn.addEventListener('click', ()=>{
+  if(!callActive || callMode !== 'chat') return;
+  if(!recording){ startRecording(); } else { stopRecording(); }
+});
+
+textSend.addEventListener('click', ()=>{
+  const v = textInput.value.trim();
+  if(!v || !callActive) return;
+  textInput.value = '';
+  sendToAgent(v);
+});
+textInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') textSend.click(); });
+
+chipsEl.addEventListener('click', (e)=>{
+  const chip = e.target.closest('.chip');
+  if(!chip || !callActive) return;
+  sendToAgent(chip.dataset.q);
+});
+
+function beginSession(mode){
+  callMode = mode;
+  callActive = true;
+  entryControls.style.display = 'none';
+  activeControls.style.display = 'flex';
+  micBtn.style.display = (mode === 'chat') ? 'inline-flex' : 'none';
+  muteBtn.style.display = 'inline-flex';
+  textFallback.style.display = 'flex';
+  chipsEl.style.display = 'flex';
+  history = [];
+  transcriptEl.innerHTML = '';
+  ticket.classList.remove('show');
+  turnCount.textContent = '0 turns';
+  startTimer();
+}
+
+function endSession(label, detail){
+  callActive = false;
+  callMode = null;
+  if(recording) stopRecording();
+  speechSynthesis.cancel();
+  if(mediaStream){ mediaStream.getTracks().forEach(tr=>tr.stop()); mediaStream = null; }
+  if(audioCtx){ audioCtx.close(); audioCtx = null; analyser = null; }
+  stopTimer();
+  entryControls.style.display = 'flex';
+  activeControls.style.display = 'none';
+  micBtn.style.display = 'none';
+  micBtn.disabled = false;
+  textFallback.style.display = 'none';
+  chipsEl.style.display = 'none';
+  setStatus(label || 'Call ended', detail || 'Tap "Start Call" or "Start Voice Chat" to talk to Ava again.', 'idle');
+}
+
+// ---- Start Voice Chat: manual tap-to-talk / tap-to-send (unchanged behavior) ----
+startChatBtn.addEventListener('click', ()=>{
+  if(callActive) return;
+  beginSession('chat');
+  micBtn.disabled = true;
+  setStatus('Starting…', 'Requesting microphone access…', 'thinking');
+
+  ensureMic()
+    .then(()=>{ micBtn.disabled = false; })
+    .catch(()=>{
+      micBtn.disabled = false;
+      setStatus('Mic blocked', 'You can still use the text box below to try Ava without a mic.');
+    });
+
+  const greeting = "Thanks for calling CareCloud. This is Ava, your virtual patient registration assistant — can I get your first and last name to get started?";
+  history.push({role:'assistant', content:greeting});
+  addMsg('agent', greeting);
+  speak(greeting).then(()=>{
+    if(callActive && callMode === 'chat') setStatus('Your turn', 'Tap the mic, speak, then tap again to send.');
+  });
+});
+
+// ---- Start Call: hands-free, auto-listen / auto-detect-silence / auto-send loop ----
+function recordUntilSilence(){
+  return new Promise((resolve)=>{
+    if(!mediaStream || !analyser || !freqData){ resolve(null); return; }
+    const mimeType = pickMimeType();
+    const chunks = [];
+    const rec = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream);
+    const SPEECH_THRESHOLD = 22;   // avg byte-frequency level counted as "speaking"
+    const SILENCE_MS = 1100;       // how long the caller must go quiet before we treat the turn as done
+    const MAX_MS = 20000;          // hard safety cap per turn
+    let hasSpeech = false, silenceStart = null, startedAt = Date.now(), raf = null;
+
+    rec.ondataavailable = (e)=>{ if(e.data && e.data.size > 0) chunks.push(e.data); };
+    rec.onstop = ()=>{
+      recording = false;
+      cancelAnimationFrame(raf);
+      if(!hasSpeech){ resolve(null); return; }
+      const blob = new Blob(chunks, { type: rec.mimeType || mimeType || 'audio/webm' });
+      resolve(blob.size > 1500 ? blob : null);
+    };
+
+    function tick(){
+      if(!callActive || callMode !== 'call'){ try{ rec.stop(); }catch(_){ } return; }
+      analyser.getByteFrequencyData(freqData);
+      let sum = 0; for(let i=0;i<freqData.length;i++) sum += freqData[i];
+      const avg = sum / freqData.length;
+      if(avg > SPEECH_THRESHOLD){ hasSpeech = true; silenceStart = null; }
+      else if(hasSpeech){
+        if(silenceStart === null) silenceStart = Date.now();
+        else if(Date.now() - silenceStart > SILENCE_MS){ try{ rec.stop(); }catch(_){ } return; }
+      }
+      if(Date.now() - startedAt > MAX_MS){ try{ rec.stop(); }catch(_){ } return; }
+      raf = requestAnimationFrame(tick);
+    }
+
+    recording = true;
+    rec.start();
+    raf = requestAnimationFrame(tick);
+  });
+}
+
+async function runCallTurn(){
+  if(!callActive || callMode !== 'call') return;
+  setStatus('Listening…', 'Speak whenever you\'re ready — no need to tap anything.', 'listening');
+  const blob = await recordUntilSilence();
+  if(!callActive || callMode !== 'call') return;
+
+  if(!blob){ return runCallTurn(); } // silence / too short — just keep listening
+
+  setStatus('Transcribing…', null, 'thinking');
+  try{
+    const form = new FormData();
+    form.append('audio', blob, 'clip.webm');
+    const res = await fetch('/api/transcribe', { method:'POST', body: form });
+    if(!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if(!callActive || callMode !== 'call') return;
+    if(data.text){ await sendToAgent(data.text); }
+  }catch(e){
+    addMsg('agent', "Sorry — I had trouble hearing that. (" + e.message.slice(0,120) + ")");
+  }
+  if(callActive && callMode === 'call') runCallTurn();
+}
+
+startCallBtn.addEventListener('click', ()=>{
+  if(callActive) return;
+  beginSession('call');
+  setStatus('Starting…', 'Requesting microphone access…', 'thinking');
+
+  ensureMic()
+    .then(async ()=>{
+      const greeting = "Thanks for calling CareCloud. This is Ava, your virtual patient registration assistant — can I get your first and last name to get started?";
+      history.push({role:'assistant', content:greeting});
+      addMsg('agent', greeting);
+      await speak(greeting);
+      runCallTurn();
+    })
+    .catch(()=>{
+      setStatus('Mic blocked', 'Hands-free call needs mic access. You can still type below instead.');
+    });
+});
+
+muteBtn.addEventListener('click', ()=>{
+  endSession();
+});
+</script>
+</body>
+</html>
