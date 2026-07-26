@@ -7,8 +7,7 @@ it was built this way, and — importantly — what wasn't finished and why,
 since one part of the assignment (a real dialable phone number) ran into a
 vendor blocker that's documented in detail in Section 5.
 
-**Live demo (browser, no phone needed):** `https://<your-app>.fastapicloud.dev/`
-**API base URL:** `https://<your-app>.fastapicloud.dev`
+**Live demo (browser, no phone needed):** https://healthcare-assistant.fastapicloud.dev
 **Phone number:** none — see "Telephony: what I tried, and why there's no
 number" below before docking points for this.
 
