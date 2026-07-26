@@ -288,14 +288,3 @@ are visible in the log stream rather than failing silently for the caller.
   validation, error handling, and the duplicate-detection bonus instead,
   which felt like the higher-value use of the time limit.
 
-## 11. Next steps (if given more time)
-
-- Get a card on file with Twilio or Vapi and finish wiring up the real
-  phone number — either by upgrading Vapi to import the existing Twilio
-  number, or finishing the direct Twilio-webhook bridge described in
-  Section 5.
-- Add automated tests for `patient_service.py` and the validation module.
-- Add appointment scheduling as a follow-on tool call after registration.
-- Add call transcript storage linked to `patient_id`.
-- Add a small admin UI (with the delete action behind a simple auth
-  token) as a nicer way to browse registered patients than raw `/docs`.
