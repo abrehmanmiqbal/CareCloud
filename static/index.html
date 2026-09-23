@@ -181,9 +181,9 @@
       <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h4l2-7 4 14 2-7h6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <h1>Ava</h1>
-    <span class="tagline">CareCloud voice patient registration · demo</span>
-    <span class="telephony-badge" title="This same backend can answer real phone calls via a Vapi Custom LLM integration — see README.">
-      <span class="dot"></span> Telephony-ready
+    <span class="tagline">CareCloud voice patient registration · live</span>
+    <span class="telephony-badge" title="Live Twilio phone line for Ava.">
+      <span class="dot"></span> 📞 +1 (470) 256-6802 — live
     </span>
   </div>
 
@@ -224,7 +224,7 @@
         <div class="chip" data-q="I already registered — I want to update my information.">Update my info</div>
         <div class="chip" data-q="Hablo español, ¿me puede ayudar?">Hablo español</div>
       </div>
-      <div class="hint">Runs entirely in your browser mic — <b>no phone number, no card, $0 cost.</b> Works in Chrome, Edge, Firefox &amp; Safari.</div>
+      <div class="hint">Prefer a real phone call? Dial <b>+1 (470) 256-6802</b> and Ava answers on a live Twilio number. Registered patients: <a href="/dashboard" style="color:var(--teal);font-weight:600;">open the dashboard</a>. Works in Chrome, Edge, Firefox &amp; Safari.</div>
     </div>
 
     <div class="panel transcript-panel">
@@ -427,7 +427,13 @@ async function sendToAgent(userText){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({history})
     });
-    if(!res.ok){ throw new Error(await res.text()); }
+    if(!res.ok){
+      let msg = '';
+      try{ msg = (await res.json()).error || ''; }catch(_){ msg = await res.text(); }
+      const err = new Error(msg || ('HTTP ' + res.status));
+      err.status = res.status;
+      throw err;
+    }
     const data = await res.json();
     history.push({role:'assistant', content:data.reply});
     addMsg('agent', data.reply);
@@ -435,7 +441,11 @@ async function sendToAgent(userText){
     if(data.result) renderTicket(data.result);
     return await speak(data.reply); // true if the caller talked over the reply
   }catch(e){
-    addMsg('agent', "Sorry — I couldn't reach the assistant backend. (" + e.message.slice(0,120) + ")");
+    if(e.status === 429 || /daily conversation limit|rate.?limit/i.test(e.message || '')){
+      addMsg('agent', "We've hit Ava's daily conversation limit for today — please try again later. (Free-tier API quota reached.)");
+    } else {
+      addMsg('agent', "Sorry — I couldn't reach the assistant backend. (" + (e.message || '').slice(0,120) + ")");
+    }
     return false;
   }
 }

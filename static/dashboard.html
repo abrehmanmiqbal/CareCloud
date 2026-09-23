@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Patient Dashboard — CareCloud</title>
+<style>
+  :root{ --bg:#F2F6F5; --panel:#fff; --ink:#0C2426; --ink-soft:#52706C;
+         --teal:#0F5C56; --teal-bright:#17847A; --mint:#C7ECDF; --mint-soft:#EAF7F1;
+         --line:#DDEAE6; --danger:#C0392B; --radius:16px; }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--ink);
+        font-family:'Segoe UI',system-ui,-apple-system,sans-serif; min-height:100vh; }
+  header{ background:linear-gradient(135deg,var(--teal),#082F2C); color:#fff;
+          padding:18px clamp(16px,4vw,40px); display:flex; align-items:center;
+          gap:14px; flex-wrap:wrap; }
+  header h1{ font-size:19px; margin:0; font-weight:600; }
+  header a{ color:var(--mint); font-size:13px; text-decoration:none; }
+  header a:hover{ text-decoration:underline; }
+  .wrap{ max-width:1100px; margin:0 auto; padding:clamp(14px,3vw,28px); }
+  .searchbar{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .searchbar input{ flex:1 1 180px; padding:11px 14px; border:1px solid var(--line);
+      border-radius:12px; font-size:14px; background:#fff; }
+  .searchbar input:focus{ outline:none; border-color:var(--teal-bright); }
+  .searchbar button{ padding:11px 20px; border:none; border-radius:12px; font-weight:600;
+      cursor:pointer; background:var(--teal); color:#fff; }
+  .searchbar button.secondary{ background:#fff; color:var(--teal); border:1px solid var(--mint); }
+  .state{ text-align:center; color:var(--ink-soft); padding:60px 20px; font-size:14px; }
+  .state.error{ color:var(--danger); }
+  table{ width:100%; border-collapse:collapse; background:var(--panel);
+         border-radius:var(--radius); overflow:hidden; box-shadow:0 2px 10px rgba(8,47,44,.07); }
+  th,td{ text-align:left; padding:12px 14px; font-size:13.5px; border-bottom:1px solid var(--line); }
+  th{ background:var(--mint-soft); font-size:11px; text-transform:uppercase;
+      letter-spacing:.06em; color:var(--ink-soft); }
+  tr.clickable{ cursor:pointer; } tr.clickable:hover{ background:var(--mint-soft); }
+  .pill{ display:inline-block; padding:3px 10px; border-radius:20px; font-size:11.5px; font-weight:600; }
+  .pill.active{ background:var(--mint-soft); color:var(--teal); border:1px solid var(--mint); }
+  .badge{ font-size:11px; background:rgba(255,255,255,.15); padding:3px 10px; border-radius:20px; }
+  /* detail panel */
+  .detail{ position:fixed; inset:0; background:rgba(8,47,44,.45); display:none;
+           align-items:center; justify-content:center; padding:16px; z-index:10; }
+  .detail.open{ display:flex; }
+  .card{ background:#fff; border-radius:20px; max-width:560px; width:100%;
+         max-height:88vh; overflow-y:auto; padding:24px; position:relative; }
+  .card h2{ margin:0 0 4px; font-size:20px; }
+  .card .sub{ color:var(--ink-soft); font-size:12.5px; margin-bottom:16px;
+              font-family:ui-monospace,monospace; }
+  .kv{ display:grid; grid-template-columns:170px 1fr; gap:7px 14px; font-size:13.5px; }
+  .kv dt{ color:var(--ink-soft); } .kv dd{ margin:0; word-break:break-word; }
+  .kv dd.optional-empty{ color:#9AB3AE; font-style:italic; }
+  .card .actions{ margin-top:20px; display:flex; gap:10px; flex-wrap:wrap; }
+  .card button{ padding:10px 18px; border-radius:12px; border:1px solid var(--line);
+      background:#fff; font-weight:600; cursor:pointer; font-size:13px; }
+  .card button.danger{ color:var(--danger); border-color:#F0C4BE; }
+  .card button.primary{ background:var(--teal); color:#fff; border-color:var(--teal); }
+  .close{ position:absolute; top:14px; right:16px; border:none; background:none;
+          font-size:22px; cursor:pointer; color:var(--ink-soft); }
+  @media (max-width:640px){ .kv{ grid-template-columns:1fr; } th:nth-child(4),td:nth-child(4){display:none;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>CareCloud — Patient Dashboard</h1>
+  <span class="badge" id="countBadge">—</span>
+  <a href="/" style="margin-left:auto;">← Back to voice agent demo</a>
+</header>
+<div class="wrap">
+  <div class="searchbar">
+    <input id="qLast"  placeholder="Filter by last name…" />
+    <input id="qPhone" placeholder="Filter by phone (digits)…" />
+    <input id="qDob"   placeholder="Filter by DOB (YYYY-MM-DD)…" />
+    <button id="searchBtn">Search</button>
+    <button class="secondary" id="clearBtn">Clear</button>
+  </div>
+  <div id="stateBox" class="state">Loading patients…</div>
+  <table id="tbl" style="display:none;">
+    <thead><tr>
+      <th>Name</th><th>Date of birth</th><th>Phone</th><th>City</th><th>Status</th><th>Registered</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<div class="detail" id="detail">
+  <div class="card">
+    <button class="close" id="detailClose" aria-label="Close">×</button>
+    <h2 id="dName">—</h2>
+    <div class="sub" id="dId">—</div>
+    <dl class="kv" id="dKv"></dl>
+    <div class="actions">
+      <button class="danger" id="deleteBtn">Delete record (soft)</button>
+      <button class="primary" id="detailCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const stateBox = document.getElementById('stateBox');
+const tbl = document.getElementById('tbl');
+const rows = document.getElementById('rows');
+const countBadge = document.getElementById('countBadge');
+let patients = [];
+
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtPhone(p){ p = String(p||''); return p.length===10 ? `(${p.slice(0,3)}) ${p.slice(3,6)}-${p.slice(6)}` : p; }
+function fmtTs(t){ if(!t) return '—'; const d = new Date(t); return isNaN(d) ? '—' : d.toLocaleString(); }
+
+async function load(){
+  stateBox.style.display = 'block'; tbl.style.display = 'none';
+  stateBox.classList.remove('error'); stateBox.textContent = 'Loading patients…';
+  const params = new URLSearchParams();
+  const last = document.getElementById('qLast').value.trim();
+  const phone = document.getElementById('qPhone').value.trim();
+  const dob = document.getElementById('qDob').value.trim();
+  if(last) params.set('last_name', last);
+  if(phone) params.set('phone_number', phone);
+  if(dob) params.set('date_of_birth', dob);
+  try{
+    const res = await fetch('/patients?' + params.toString());
+    const body = await res.json();
+    if(!res.ok) throw new Error(typeof body.error === 'string' ? body.error : ('HTTP ' + res.status));
+    patients = body.data || [];
+    countBadge.textContent = patients.length + ' record' + (patients.length === 1 ? '' : 's');
+    render();
+  }catch(e){
+    stateBox.classList.add('error');
+    stateBox.textContent = 'Failed to load patients: ' + e.message + ' — check that the backend is running.';
+  }
+}
+
+function render(){
+  rows.innerHTML = '';
+  if(!patients.length){
+    stateBox.style.display = 'block'; tbl.style.display = 'none';
+    stateBox.textContent = 'No patient records found. Try clearing the filters — or register a new patient by calling the agent.';
+    return;
+  }
+  stateBox.style.display = 'none'; tbl.style.display = 'table';
+  patients.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.className = 'clickable';
+    tr.innerHTML = `
+      <td><b>${esc(p.last_name)}, ${esc(p.first_name)}</b></td>
+      <td>${esc(p.date_of_birth)}</td>
+      <td>${esc(fmtPhone(p.phone_number))}</td>
+      <td>${esc(p.city)}, ${esc(p.state)}</td>
+      <td><span class="pill active">Active</span></td>
+      <td>${esc(fmtTs(p.created_at))}</td>`;
+    tr.addEventListener('click', () => openDetail(p.patient_id));
+    rows.appendChild(tr);
+  });
+}
+
+const OPTIONAL_LABELS = {
+  email:'Email', address_line_2:'Address line 2', insurance_provider:'Insurance provider',
+  insurance_member_id:'Member ID', preferred_language:'Preferred language',
+  emergency_contact_name:'Emergency contact', emergency_contact_phone:'Emergency contact phone'
+};
+const REQUIRED_LABELS = [
+  ['date_of_birth','Date of birth'],['sex','Sex'],['phone_number','Phone'],
+  ['address_line_1','Address line 1'],['city','City'],['state','State'],['zip_code','ZIP']
+];
+
+function openDetail(id){
+  const p = patients.find(x => x.patient_id === id);
+  if(!p) return;
+  document.getElementById('dName').textContent = p.first_name + ' ' + p.last_name;
+  document.getElementById('dId').textContent = 'patient_id: ' + p.patient_id;
+  const kv = document.getElementById('dKv'); kv.innerHTML = '';
+  const add = (k, v, optional) => {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd');
+    if(v === null || v === undefined || v === ''){
+      dd.textContent = optional ? 'Not provided' : '—';
+      dd.className = 'optional-empty';
+    } else {
+      dd.textContent = (k === 'Phone' || k === 'Emergency contact phone') ? fmtPhone(v) : v;
+    }
+    kv.append(dt, dd);
+  };
+  REQUIRED_LABELS.forEach(([k, label]) => add(label, p[k], false));
+  Object.entries(OPTIONAL_LABELS).forEach(([k, label]) => add(label, p[k], true));
+  add('Registered', fmtTs(p.created_at), false);
+  add('Last updated', fmtTs(p.updated_at), false);
+  const del = document.getElementById('deleteBtn');
+  del.onclick = async () => {
+    if(!confirm(`Soft-delete ${p.first_name} ${p.last_name}? The record is marked deleted, not removed.`)) return;
+    try{
+      const res = await fetch('/patients/' + p.patient_id, {method:'DELETE'});
+      const body = await res.json();
+      if(!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'HTTP ' + res.status);
+      closeDetail(); load();
+    }catch(e){ alert('Delete failed: ' + e.message); }
+  };
+  document.getElementById('detail').classList.add('open');
+}
+function closeDetail(){ document.getElementById('detail').classList.remove('open'); }
+
+document.getElementById('searchBtn').addEventListener('click', load);
+document.getElementById('clearBtn').addEventListener('click', () => {
+  ['qLast','qPhone','qDob'].forEach(i => document.getElementById(i).value = ''); load();
+});
+['qLast','qPhone','qDob'].forEach(i =>
+  document.getElementById(i).addEventListener('keydown', e => { if(e.key === 'Enter') load(); }));
+document.getElementById('detailClose').addEventListener('click', closeDetail);
+document.getElementById('detailCloseBtn').addEventListener('click', closeDetail);
+document.getElementById('detail').addEventListener('click', e => { if(e.target.id === 'detail') closeDetail(); });
+
+load();
+</script>
+</body>
+</html>

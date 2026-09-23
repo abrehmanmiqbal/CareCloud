@@ -1,290 +1,376 @@
-# Ava — CareCloud Voice Patient Registration Agent
+# CareCloud — Voice AI Patient Registration Agent
 
-Ava is a conversational AI agent that registers a new patient (or updates an
-existing one) over voice, saves the record to a persistent database, and
-exposes it all through a REST API. This README explains what was built, why
-it was built this way, and — importantly — what wasn't finished and why,
-since one part of the assignment (a real dialable phone number) ran into a
-vendor blocker that's documented in detail in Section 5.
+A voice-based AI agent on a **real, dialable U.S. phone number** that collects standard patient demographics through natural conversation, persists them to a database, and exposes them through a REST API and a web dashboard.
 
-**Live demo (browser, no phone needed):** https://healthcare-assistant.fastapicloud.dev
-
-**Phone number:** none — see "Telephony: what I tried, and why there's no
-number" below before docking points for this.
+* **Phone:** +1 (470) 256-6802 (live, Twilio) — speak naturally to register a patient
+* **API:** https://healthcare-assistant.fastapicloud.dev/patients
+* **Dashboard:** https://healthcare-assistant.fastapicloud.dev/dashboard
+* **Browser demo:** https://healthcare-assistant.fastapicloud.dev/
 
 ---
 
-## 1. What's actually working right now
+## Features
 
-Everything in the assignment except the live phone call:
+* Natural, conversational intake ("Ava") — not a rigid IVR menu
+* One question at a time, but handles multiple fields in a single answer
+* Graceful corrections ("Actually my last name is D-A-V-I-S"), start-over requests, interruptions
+* Re-prompts **only** the invalid/missing field, never the whole form
+* Optional fields offered once, collected only if the caller opts in
+* Full read-back of everything collected before saving, then **explicit confirmation required**
+* Duplicate detection by phone number — offers to update an existing record instead
+* Same agent logic serves the phone line and the browser demo
+* REST API with consistent envelope, proper status codes, server-side validation, soft deletes
+* Web dashboard: list, search, detail view, soft delete
+* Automated test suite (`test_api.py`)
 
-- A full conversational registration flow, driven by an LLM (Groq/Llama
-  3.3), reachable from a browser at the URL above (click "Start Voice Chat"
-  to talk, or type — both go through the same agent).
-- All required and optional fields from the spec, collected one at a time,
-  with the same validation rules enforced both by the agent's tools and
-  independently by the REST API.
-- A read-back-and-confirm step before anything is saved, enforced in code
-  (not just prompted — see Section 7).
-- Duplicate detection by phone number, with an offer to update instead of
-  re-register.
-- Persistent storage (SQLite by default, Postgres if you set
-  `DATABASE_URL`), survives restarts.
-- A full REST API (`/patients` CRUD) with the exact JSON envelope the spec
-  asked for, proper status codes, and server-side validation independent of
-  the voice agent.
-- Structured logging of every registration/update to stdout.
+## Architecture
 
-What's missing is a **real, dialable phone number** in front of it. The
-code that would sit behind that number (`/chat/completions`, a
-Vapi-compatible "Custom LLM" endpoint) is already written, tested against
-the browser demo's own conversation logic, and ready to be pointed at by
-any Vapi assistant — it just doesn't have a phone number attached to it
-right now, for reasons explained below.
-
----
-
-## 2. Architecture
-
-```
-  Browser mic / text  ──►  static/index.html  ──►  POST /api/chat  ──┐
-  (this repo's own demo UI, what's actually being used to test this)  │
-                                                                        ├─► voice_agent.run_agent_turn()
-  Phone call (not currently connected — see Section 5)                 │        │
-  Vapi Custom LLM  ──►  POST /chat/completions  ────────────────────────        ▼
-                                                                          patient_service.py
-                                                                       (validation + DB writes)
-                                                                                 │
-  REST clients (e.g. curl, /docs)  ───────────────────────────────────────────►▼
-                                    /patients (CRUD)                     patients table
-                                                                       (SQLite or Postgres)
+```text
+Caller ──phone──► Twilio ──webhook──► /twilio/voice · /twilio/gather
+                                       (twilio_handler.py: TwiML <Gather input="speech">,
+                                        per-CallSid session in memory)
+Browser ──mic──► /api/chat · /api/transcribe ──┐
+                                                ├─► voice_agent.run_agent_turn()
+REST clients ─────────► /patients ──────────────┘        │
+                                                            ▼
+                                              patient_service.py (validation,
+                                              duplicate check, confirmed gate)
+                                                            │
+                                                            ▼
+                                              SQLite file  ──or── Postgres (DATABASE_URL)
 ```
 
-**Why this shape:** the voice agent and the REST API never touch the
-database independently — they both call the same `patient_service`
-functions. A patient registered by voice is validated by the exact same
-rules, and lands in the exact same table, as one created directly through
-the API. This is also what makes "confirm before saving" a structural
-guarantee rather than something the model could accidentally skip (see
-Section 7).
+**Key rule:** The LLM never writes to the database. Every save flows:
 
-I kept `/chat/completions` in the codebase rather than ripping it out once
-the phone number fell through, because it costs nothing to keep — it needs
-nothing but `GROQ_API_KEY`, same as everything else — and it's genuine
-proof that the telephony integration itself was built and would work the
-moment a number is attached to it.
+conversation → structured patient state → server-side validation → read-back →
+explicit confirmation (`confirmed: true`, **enforced in code** in
+`voice_agent._execute_tool` — a tool call without it returns
+`confirmation_required` and writes nothing) → `patient_service` → DB → the
+outcome is spoken back to the caller.
 
-### Tech stack & why
+A failed DB write is reported to the caller, never silently swallowed.
 
-| Layer | Choice | Why |
-|---|---|---|
-| Backend | FastAPI (Python) | async, automatic OpenAPI docs, fast to get right under a time limit |
-| LLM | Groq (`llama-3.3-70b-versatile`) | free tier with no card required, and very low inference latency — latency matters a lot for anything meant to feel like a live conversation |
-| Voice/telephony (built, currently unattached) | Vapi, via a Custom-LLM integration | abstracts STT/TTS so the agent logic stays the focus, as the assessment itself recommends — see Section 5 for why no number is live |
-| Database | SQLite by default, Postgres if `DATABASE_URL` is set | SQLite needs zero setup locally; swapping to Postgres for guaranteed persistence in production is a one-env-var change, no code change |
-| Hosting | FastAPI Cloud | zero-config deploy for a FastAPI app, built by the FastAPI team |
+Both entry points (phone and browser) call the identical
+`voice_agent.run_agent_turn()`, and both it and the REST API call the same
+`patient_service` layer — so a patient registered by voice passes the exact
+same validation and lands in the same table as one created via `POST /patients`.
 
-### Separation of concerns
+## Tech stack & why
 
-- `models.py` — SQLAlchemy schema for the `patients` table
-- `validation.py` — every field's validation rule, independent of the caller
-- `patient_service.py` — the only code that reads/writes patients (business logic)
-- `patients.py` — thin REST layer (HTTP ↔ service layer translation)
-- `voice_agent.py` — LLM system prompt, tool schemas, Groq calls, tool execution
-- `database.py` — engine/session setup (SQLite or Postgres)
-- `main.py` — wiring: app, CORS, error envelope, routes, static hosting
+| Layer     | Choice                                         | Why                                                                                                                        |
+| --------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Telephony | Twilio + `<Gather input="speech">` + Polly TTS | Built-in phone-grade STT/TTS — no Deepgram/ElevenLabs/Vapi accounts or per-minute bills; the fastest path to a real number |
+| LLM       | Groq — `llama-3.3-70b-versatile`               | Fast, generous free tier, OpenAI-compatible API                                                                            |
+| Backend   | FastAPI + SQLAlchemy                           | Typed, async, tiny footprint; the assessment's recommended Python stack                                                    |
+| Database  | SQLite locally / Postgres via `DATABASE_URL`   | SQLite = zero-setup local dev; DATABASE_URL swap removes any doubt about ephemeral deploy disks                            |
+| Hosting   | FastAPI Cloud                                  | One-command deploys; app is already linked (`.fastapicloud/`)                                                              |
 
----
+## Voice agent conversational design
 
-## 3. Run locally
+The full system prompt is in `voice_agent.py` (`SYSTEM_PROMPT`) with inline comments. Design decisions:
+
+* **Short replies (1–3 sentences), no markdown** — it's read aloud by TTS.
+* **One field at a time** in a natural order; the model is explicitly allowed to accept multi-field answers when offered.
+* **Normalization before tool calls:** dates → `YYYY-MM-DD`, phones → 10 digits.
+* **Duplicate check** as soon as the phone number is known (`lookup_patient`).
+* **Optional fields offered once**, phrased per the assessment brief.
+* **Confirmation gate:** read back everything, get explicit agreement, then call the save tool once with `confirmed=true`. A correction resets the read-back.
+* **Error style:** apologize briefly, re-ask only the flagged field(s).
+* **Boundaries:** no medical advice; real emergencies → hang up and dial 911.
+* **Spanish support:** if the caller switches to Spanish, the agent follows.
+
+### Phone session state
+
+In-memory dict keyed by Twilio `CallSid` (single-worker deployment). Only conversation context lives there — the patient record is persisted before hangup, so a server restart can lose at most the tail of a conversation, and the caller hears a graceful apology rather than silence.
+
+Expired sessions are swept after 4 hours. This is a documented trade-off (see Known Limitations).
+
+## API
+
+Base URL: `https://healthcare-assistant.fastapicloud.dev`
+
+All responses use the envelope `{"data": ..., "error": null}`.
+
+Errors are human-readable strings or `{field: message}` maps — never stack traces.
+
+| Method | Endpoint         | Description                                                                                                    |
+| ------ | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| GET    | `/patients`      | List patients. Optional: `?last_name=`, `?date_of_birth=YYYY-MM-DD`, `?phone_number=`, `?include_deleted=true` |
+| GET    | `/patients/{id}` | One patient by UUID                                                                                            |
+| POST   | `/patients`      | Create (201)                                                                                                   |
+| PUT    | `/patients/{id}` | Partial update                                                                                                 |
+| DELETE | `/patients/{id}` | Soft delete (sets `deleted_at`)                                                                                |
+| GET    | `/api/health`    | Liveness + config sanity                                                                                       |
+
+### Example
 
 ```bash
+curl -X POST https://healthcare-assistant.fastapicloud.dev/patients \
+  -H "Content-Type: application/json" \
+  -d '{"first_name":"Jane","last_name":"Doe","date_of_birth":"1985-04-12",
+       "sex":"Female","phone_number":"4045550100","address_line_1":"1200 Peachtree St NE",
+       "city":"Atlanta","state":"GA","zip_code":"30309"}'
+```
+
+Expected response:
+
+```text
+201 {"data":{"patient_id":"…","created_at":"…",…},"error":null}
+```
+
+### Validation
+
+Validation is enforced server-side on every create/update, independently of the voice agent.
+
+| Field                   | Rule                                           |
+| ----------------------- | ---------------------------------------------- |
+| first_name / last_name  | 1–50 chars, letters, hyphens, apostrophes      |
+| date_of_birth           | Valid date, not in the future                  |
+| sex                     | Male / Female / Other / Decline to Answer      |
+| phone_number            | U.S. 10-digit (normalized from common formats) |
+| email                   | Valid email format (optional)                  |
+| state                   | Valid 2-letter U.S. abbreviation               |
+| zip_code                | 5-digit or ZIP+4                               |
+| emergency_contact_phone | 10-digit if provided                           |
+
+## Database & environment variables
+
+Schema: `patients` table with UUID `patient_id`, demographic fields, `preferred_language` (default English), `created_at` / `updated_at` (UTC), and `deleted_at` for soft deletes.
+
+SQLAlchemy creates the schema automatically at startup.
+
+| Env var              | Required                  | Notes                                                                        |
+| -------------------- | ------------------------- | ---------------------------------------------------------------------------- |
+| `GROQ_API_KEY`       | **Yes**                   | Free key from Groq Console                                                   |
+| `DATABASE_URL`       | Recommended in production | PostgreSQL connection string, e.g. `postgresql+psycopg2://user:pass@host/db` |
+| `GROQ_MODEL`         | No                        | Default `llama-3.3-70b-versatile`                                            |
+| `CORS_ORIGINS`       | No                        | Comma-separated allowlist; default `*`                                       |
+| `SEED_DEMO_PATIENTS` | No                        | Set `0` to skip demo seeding                                                 |
+
+## Local setup
+
+### Windows CMD
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
-export GROQ_API_KEY="your-key-here"     # free at console.groq.com, no card
-uvicorn main:app --reload --port 8000
+set GROQ_API_KEY=YOUR_GROQ_API_KEY
+uvicorn main:app --reload
 ```
 
-Open `http://localhost:8000` and click **Start Voice Chat** (mic) or
-**Start Call** to talk to Ava. Interactive API docs, including a way to
-list every registered patient (`GET /patients`), live at
-`http://localhost:8000/docs`.
+Then open:
 
----
+```text
+http://localhost:8000
+http://localhost:8000/dashboard
+```
 
-## 4. Environment variables
-
-| Variable | Required | Default | Notes |
-|---|---|---|---|
-| `GROQ_API_KEY` | **Yes** | — | Free key at console.groq.com. Without it, `/api/chat` and `/chat/completions` return a clear 500 telling you to set it, instead of failing silently. |
-| `GROQ_MODEL` | No | `llama-3.3-70b-versatile` | |
-| `GROQ_WHISPER_MODEL` | No | `whisper-large-v3-turbo` | Used by the browser demo's `/api/transcribe` for speech-to-text. |
-| `DATABASE_URL` | No | *(SQLite file)* | Set to a Postgres URL (e.g. a free Neon or Supabase instance) for a stronger persistence guarantee across redeploys — see Known Limitations. |
-
-Nothing above is hardcoded anywhere in the source — everything reads from
-`os.environ`. Set these as environment variables on FastAPI Cloud, or
-locally via a `.env` you export yourself (see `.env.example`).
-
----
-
-## 5. Telephony: what I tried, and why there's no number
-
-The assignment explicitly says a reviewer will call a real number, and the
-FAQ addresses exactly the situation I ended up in:
-
-> "What if I can't get a phone number provisioned in time? Document what
-> you tried and why it failed... You will not be penalized for vendor
-> issues, but you will be evaluated on how you handled the blocker."
-
-Here's exactly what I tried, in order:
-
-1. **Vapi's own free/trial number.** Vapi's dashboard offers a free trial
-   phone number, but provisioning one from my account came back as
-   unavailable — it's region-gated, and my account's region wasn't
-   eligible for a free U.S. number.
-2. **Twilio, with the number imported into Vapi.** I created a Twilio
-   trial account, which came with $15.50 in trial credit, and successfully
-   provisioned a real U.S. number through it ((478) 250-0295, still active
-   at time of writing). The plan was to import that number into Vapi as a
-   "Bring Your Own Number," but Vapi's import flow for connecting an
-   external Twilio number requires a paid Vapi plan.
-3. **Building a direct Twilio ↔ Groq bridge, skipping Vapi entirely.** I
-   drafted this (Twilio's own `<Gather>`/`<Say>` TwiML calling straight
-   into the same `voice_agent.run_agent_turn()` used everywhere else), but
-   actually keeping the Twilio number active/attached long-term requires a
-   card on file with Twilio, which I didn't have available to add for this
-   assessment.
-
-Every path led to the same wall: getting a real number attached to a
-running assistant requires a payment method on file with at least one
-vendor in the chain, even on "free" tiers. That's a legitimate blocker, not
-something I could route around without spending money — so instead of
-burning the remaining time budget chasing it further, I made sure
-everything *behind* the phone number is fully built, documented, and
-independently testable through the browser demo, and I'm documenting the
-blocker here as the FAQ suggests.
-
-**What I'd do with 15 more minutes and a card on file:** either upgrade
-Vapi to import the Twilio number I already have, or point that Twilio
-number's "A call comes in" webhook straight at a `/twilio/voice` endpoint
-built the same way as `/chat/completions` — no LLM or database code would
-need to change, only the telephony adapter at the edge.
-
----
-
-## 6. Deploy to FastAPI Cloud
-
-This project is already linked to a FastAPI Cloud project (see
-`.fastapicloud/`). To (re)deploy:
+### Linux / macOS
 
 ```bash
-pip install fastapi-cloud-cli   # if not already installed
-fastapi deploy
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export GROQ_API_KEY=YOUR_GROQ_API_KEY
+uvicorn main:app --reload
 ```
 
-Then, in the FastAPI Cloud dashboard for this app, set the environment
-variables from Section 4 (`GROQ_API_KEY` at minimum) under
-**Settings → Environment Variables**, and redeploy so they take effect.
+## Testing
 
-**Deployment details already handled in this codebase:**
-- No API keys or secrets anywhere in source — everything reads from `os.environ`.
-- No hardcoded `localhost` URLs — CORS is open (`*`) so the frontend works
-  from whatever domain FastAPI Cloud assigns.
-- `requirements.txt` is pinned to versions known to work together
-  (`fastapi[standard]`, `httpx`, `pydantic`, `sqlalchemy`, `psycopg2-binary`).
-- Static files are served relative to `Path(__file__).parent`, not a
-  hardcoded absolute path, so it doesn't matter what directory the platform
-  runs the process from.
-- `psycopg2-binary` is included even though the default is SQLite, so
-  switching to `DATABASE_URL=postgresql://...` later needs zero redeploy of
-  dependencies — just set the env var.
+```bash
+SEED_DEMO_PATIENTS=0 DATABASE_URL=sqlite:////tmp/carecloud_test.db pytest test_api.py -v
+```
 
-**One thing worth testing yourself before relying on this for grading:**
-FastAPI Cloud's disk persistence model for a plain SQLite file isn't
-publicly documented in detail. If the container's local disk gets wiped on
-redeploy or restart, the SQLite file (and every registered patient) goes
-with it — which would fail the "data survives restarts" requirement. The
-fix is one environment variable, no code change: point `DATABASE_URL` at a
-free Postgres instance (Neon, Supabase, or Railway all have no-card free
-tiers). I'd do this before a real review if there's time; otherwise, test
-it yourself by registering a patient, redeploying, and checking
-`/patients` again afterward.
+The test suite covers:
 
----
+* Create, retrieve, list and filter patients
+* Partial updates
+* Soft deletes
+* Validation rules
+* Duplicate detection
+* Agent confirmation gate
+* Error response envelopes
 
-## 7. REST API
+### Testing the voice agent
 
-Base path: `/patients`. Every response uses the envelope
-`{"data": ..., "error": ...}`.
+**By phone:** dial **+1 (470) 256-6802**.
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/patients` | List patients. Query params: `last_name`, `date_of_birth` (YYYY-MM-DD), `phone_number`, `include_deleted` |
-| `GET` | `/patients/{id}` | Get one patient by UUID |
-| `POST` | `/patients` | Create a patient (full payload, server-validated) |
-| `PUT` | `/patients/{id}` | Partial update — send only the fields that changed |
-| `DELETE` | `/patients/{id}` | Soft-delete (sets `deleted_at`, never removes the row) |
+> **Twilio trial account:** if the account is still on trial, the caller's phone number must first be added under **Verified Caller IDs** in the Twilio Console.
 
-Full interactive schema: `/docs`.
+**By browser:** open the app and use the browser voice interface.
 
----
+**By API:** script a registration against:
 
-## 8. Conversational design notes
+```text
+POST /patients
+```
 
-- **One question at a time.** The system prompt explicitly forbids asking
-  for multiple fields in a single turn — the single biggest lever for
-  "sounds like a person," not an IVR menu.
-- **Duplicate detection.** As soon as a phone number is collected, the
-  agent calls `lookup_patient` before continuing. A match triggers an
-  offer to update instead of duplicate-registering.
-- **Confirmation is enforced in code, not just prompted.** Both
-  `register_patient` and `update_patient` take a required `confirmed`
-  boolean; the tool itself refuses to write to the database until it's
-  `true`. Even if the model got over-eager, it structurally cannot save
-  unconfirmed data.
-- **Field-specific error recovery.** Every tool validates through the same
-  `validation.py` used by the REST API. On failure it returns exactly
-  which field(s) were invalid and why, so the agent re-asks only that
-  field instead of restarting the whole conversation.
-- **Mid-call corrections** ("Actually my last name is D-A-V-I-S, not
-  D-A-V-I-E-S") are handled by the model simply updating what it has
-  collected and re-reading the summary — nothing is written to the
-  database until the next explicit confirmation.
-- **Spanish switch** is a one-line instruction in the system prompt ("if
-  the caller says Hablo español, continue in Spanish") — Llama 3.3 is
-  multilingual, so no separate pipeline was needed for this.
-- **Emergencies / medical advice** are explicitly out of scope in the
-  prompt: the agent redirects callers to 911 and never gives clinical
-  guidance.
+or replay a conversation through:
 
----
+```text
+POST /api/chat
+```
 
-## 9. Observability
+## Deployment — FastAPI Cloud
 
-Every registration, update, and soft-delete is logged to stdout with a
-structured message (`voice_registration_complete`,
-`voice_update_complete`, etc.), including the patient's ID and name. Groq
-API errors are logged with their response bodies (truncated) so failures
-are visible in the log stream rather than failing silently for the caller.
+The project is linked through:
 
----
+```text
+.fastapicloud/cloud.json
+```
 
-## 10. Known limitations & trade-offs
+Deploy using the FastAPI Cloud CLI:
 
-- **No live phone number** — see Section 5 for the full story. This is the
-  single biggest gap versus the spec, and it's a vendor/payment blocker,
-  not a code gap: the telephony adapter code exists and is wired to the
-  same agent and database as everything else.
-- **SQLite vs. Postgres** — SQLite is the zero-setup default; see the
-  deployment note in Section 6 about swapping in `DATABASE_URL` for a
-  stronger persistence guarantee in production.
-- **Browser demo STT/TTS quality** varies by browser (Chrome recommended);
-  this is a limitation of keeping the demo free and low-latency, not of
-  the underlying agent logic.
-- **No auth on the REST API.** Fine for a take-home demo; a production
-  system would put this behind API keys / SSO and real RBAC.
-- **No HIPAA controls** — per the assessment's own scope, this stores demo
-  data only, never real PHI.
-- **Appointment scheduling bonus** wasn't implemented — time went into
-  validation, error handling, and the duplicate-detection bonus instead,
-  which felt like the higher-value use of the time limit.
+```bash
+pip install fastapi-cloud
+fastapi cloud deploy
+```
 
+After deployment, confirm the required environment variables in FastAPI Cloud:
+
+```text
+GROQ_API_KEY
+```
+
+For production persistence, configure:
+
+```text
+DATABASE_URL
+```
+
+with a managed PostgreSQL database.
+
+## Twilio configuration
+
+The live Twilio number is:
+
+```text
++1 (470) 256-6802
+```
+
+Configure the number in the Twilio Console:
+
+### Incoming call webhook
+
+**Voice Configuration → A call comes in**
+
+Method:
+
+```text
+HTTP POST
+```
+
+URL:
+
+```text
+https://healthcare-assistant.fastapicloud.dev/twilio/voice
+```
+
+### Call status webhook
+
+Optional:
+
+```text
+https://healthcare-assistant.fastapicloud.dev/twilio/status
+```
+
+Method:
+
+```text
+HTTP POST
+```
+
+The status endpoint allows the application to clean up call sessions after the call ends.
+
+### Twilio trial restriction
+
+On a Twilio trial account, incoming calls may be restricted to verified caller numbers.
+
+To test the live number:
+
+1. Open Twilio Console.
+2. Go to **Phone Numbers → Manage → Verified Caller IDs**.
+3. Add the phone number you will call from.
+4. Complete the verification.
+5. Call **+1 (470) 256-6802**.
+
+This is a Twilio account restriction rather than an application-code limitation.
+
+## Dashboard
+
+The dashboard is available at:
+
+```text
+https://healthcare-assistant.fastapicloud.dev/dashboard
+```
+
+It provides:
+
+* Patient list
+* Search
+* Name, DOB, phone and city information
+* Registration timestamp
+* Full patient detail view
+* Soft-delete functionality
+* Loading, empty and error states
+
+## Observability
+
+The application logs:
+
+* Completed voice registrations
+* Final collected patient payloads
+* API write operations
+* Twilio call lifecycle events
+* Twilio `CallSid` values
+
+API keys and other secrets are not logged.
+
+## Security & data handling
+
+* The LLM does not directly write to the database.
+* Patient data passes through server-side validation before persistence.
+* Explicit patient confirmation is required before saving through the voice agent.
+* Soft deletes preserve records rather than physically removing them.
+* API errors do not expose stack traces.
+* Secrets are supplied through environment variables rather than hard-coded in source files.
+
+## Known limitations
+
+* **Twilio trial restrictions:** trial accounts can require Verified Caller IDs for testing.
+* **Phone session state:** conversation state is held in memory and is associated with the Twilio `CallSid`.
+* **Single-worker assumption:** the in-memory phone session design is intended for the current deployment architecture.
+* **SQLite persistence:** when `DATABASE_URL` is not configured, the application falls back to SQLite. Production deployments should use managed PostgreSQL for durable persistence.
+* **Authentication:** the current demo API does not implement production-grade user authentication.
+* **Healthcare compliance:** this project is an assessment/demo system and does not implement the complete security, privacy, auditing, access-control, and compliance requirements of a production HIPAA environment.
+
+## Project structure
+
+```text
+CareCloud/
+├── main.py
+├── voice_agent.py
+├── twilio_handler.py
+├── patient_service.py
+├── database.py
+├── models.py
+├── schemas.py
+├── test_api.py
+├── requirements.txt
+├── static/
+│   ├── index.html
+│   └── dashboard.html
+└── .fastapicloud/
+    └── cloud.json
+```
+
+## Summary
+
+CareCloud provides the same patient-registration agent through three interfaces:
+
+1. **Live phone call** through Twilio
+2. **Browser voice interface**
+3. **REST API**
+
+All patient creation paths ultimately use the same validation and persistence layer, while the voice agent requires explicit confirmation before saving a registration.

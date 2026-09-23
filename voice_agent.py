@@ -2,8 +2,8 @@
 Voice agent — the conversational "brain" for patient registration.
 
 Shared by:
-  - /api/chat            (browser demo — mic in this repo's own UI)
-  - /chat/completions     (Vapi "Custom LLM" endpoint — real phone number)
+  - /api/chat            (browser demo — mic UI in this repo's own UI)
+  - /twilio/gather       (real phone calls via Twilio — see twilio_handler.py)
 
 Both entry points funnel every turn through run_agent_turn(), which calls
 Groq's LLM, executes any tool call against patient_service (the same layer
@@ -13,8 +13,6 @@ caller.
 import json
 import logging
 import os
-import time
-import uuid
 
 import httpx
 from fastapi import HTTPException
@@ -115,11 +113,12 @@ TOOLS = [
         "function": {
             "name": "register_patient",
             "description": (
-                "Create a new patient record. You MUST call this once with confirmed=false is "
-                "never necessary — only call it after reading the full summary back to the "
-                "caller and receiving explicit confirmation, at which point call with "
-                "confirmed=true. If any field is invalid, the tool returns a validation_error "
-                "with the specific field(s) to re-ask."
+                "Create a new patient record. Only call this AFTER reading the full summary "
+                "back to the caller and receiving their explicit confirmation — then call it "
+                "once with confirmed=true. Never call it with confirmed=false; there is no "
+                "reason to call this tool before the caller has confirmed. If any field is "
+                "invalid, the tool returns a validation_error with the specific field(s) to "
+                "re-ask."
             ),
             "parameters": {
                 "type": "object",
@@ -210,6 +209,14 @@ async def call_groq(messages, tools=None):
             GROQ_URL,
             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
             json=payload,
+        )
+    if r.status_code == 429:
+        logger.error("groq_rate_limited body=%s", r.text[:500])
+        raise HTTPException(
+            429,
+            "Ava has reached her daily conversation limit for today (free Groq API "
+            "quota). Please try again later, or the site owner can raise the limit "
+            "at console.groq.com/settings/billing.",
         )
     if r.status_code != 200:
         logger.error("groq_error status=%s body=%s", r.status_code, r.text[:500])
@@ -317,17 +324,3 @@ async def run_agent_turn(messages: list) -> tuple[str, dict | None]:
         reply_text = choice.get("content", "") or ""
 
     return reply_text, result_summary
-
-
-def vapi_response_envelope(reply_text: str) -> dict:
-    """Wraps a reply as an OpenAI-compatible chat.completion, the shape
-    Vapi's Custom LLM provider expects."""
-    return {
-        "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": GROQ_MODEL,
-        "choices": [
-            {"index": 0, "message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}
-        ],
-    }
