@@ -1,2 +1,4 @@
 carecloud.db
 *.db
+__pycache__/
+*.pyc
